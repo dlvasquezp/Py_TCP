@@ -1,0 +1,10 @@
+conda create --name yoloEnv  python=3.9
+conda activate yoloEnv
+conda install anaconda git
+cd "folder"
+git clone https://github.com/ultralytics/yolov5 
+cd yolov5
+pip install -r requirements.txt  
+pip install spyder-kernels==2.4.*
+
+
