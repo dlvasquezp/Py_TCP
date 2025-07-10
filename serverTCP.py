@@ -59,7 +59,6 @@ def processImage(model,image2, cellsBorder=True):
     
     return segment, centers
     
-
 ##########################################################
 def empty_socket(sock, limit=100):
     """remove the data present on the socket"""
@@ -87,27 +86,26 @@ while True:
     print('PYTHON SERVER READY')
     conn, clientAddress = server_object.accept() # connection,address
     print(clientAddress)
+    conn.settimeout(5)
     try:
-        conn.settimeout(20)
         ############### Receive Image #####################################
         print("SERVER CONNECTED TO CLIENT")
-        signalState = 0
-        while signalState==0:
-            conn.send(b"SYN")
-            message = conn.recv(7)
-            if message.decode('utf-8') == "SYN+ACK":
-                print("Receiving data...")
-                ySize = int.from_bytes(conn.recv(4), 'big')
-                xSize = int.from_bytes(conn.recv(4), 'big')
-                data_receive = conn.recv(xSize*ySize)
-                if len(data_receive) == 0:
-                    raise ConnectionResetError
-                if len(data_receive)==(xSize*ySize):
-                    signalState=1
-                    conn.send(b"ACK") 
-                    print("Done, transmition length: ",xSize,ySize,len(data_receive))
-                else:
-                    print("Comunication error")
+        conn.send(b"SYN")
+        message = conn.recv(7)
+        if message.decode('utf-8') == "SYN+ACK":
+            print("Receiving data...")
+            ySize = int.from_bytes(conn.recv(4), 'big')
+            xSize = int.from_bytes(conn.recv(4), 'big')
+            data_receive = conn.recv(xSize*ySize)
+            if len(data_receive) == 0:
+                raise ConnectionResetError
+            if len(data_receive)==(xSize*ySize):
+                conn.send(b"ACK") 
+                print("Done, transmition length: ",xSize,ySize,len(data_receive))
+            else:
+                print("Comunication error")
+                raise ConnectionResetError
+
  
         ############### Process image #####################################
         print("Processing...")
@@ -148,24 +146,21 @@ while True:
         print("# cells:", "%i"%(len(maskCenters)))
         
         signalState = 0
-        while signalState==0:
-            empty_socket(conn)
-            conn.send(b"SYN")
-            message = conn.recv(7)
+        empty_socket(conn)
+        conn.send(b"SYN")
+        message = conn.recv(7)
             
-            if message.decode('utf-8') == "SYN+ACK":
-                print("Transmiting data...")
-                conn.send(dataHex)
-                conn.send(hexaImage)
-                message = conn.recv(3)
-                if message.decode('utf-8') == "ACK":
-                    conn.send(centersHex)
-                    conn.send(byteCenters)
-                    signalState=1
-                    print("Done.")
+        if message.decode('utf-8') == "SYN+ACK":
+            print("Transmiting data...")
+            conn.send(dataHex)
+            conn.send(hexaImage)
+            message = conn.recv(3)
+            if message.decode('utf-8') == "ACK":
+                conn.send(centersHex)
+                conn.send(byteCenters)
+                signalState=1
+                print("Done.")
                     
-    #except:
-    #   conn.close()
     except UnicodeDecodeError:
         print ('Encoding Error: restarting server')
     except TimeoutError:

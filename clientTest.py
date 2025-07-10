@@ -6,7 +6,7 @@ import time
 import struct
 
 ############### Load image ###############
-im="temp/ImageFileName25.jpg"
+im="temp/ImageFileName1.jpg"
 original = plt.imread(im)
 
 ySize,xSize=np.shape(original)
@@ -25,60 +25,79 @@ dataLen   = len(hexaImage)
 dataHex   = dataLen.to_bytes( 4, byteorder='big' )
 ################################################
 
-# Creating a socket instance
-conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 # Connecting to the localhost
 ip_address = '127.0.0.1'
 port = 5555
 
-
-############ Connect #################
-conn.connect((ip_address, port))
-
-############ reicive SYN #############
-message = conn.recv(7)
-if message.decode('utf-8') == "SYN":
-    ################# send SYN+AKC ###########
-    conn.send(b"SYN+ACK")
-    ################# send size ###########
-    conn.send(ySize.to_bytes( 4, byteorder='big' ))
-    conn.send(xSize.to_bytes( 4, byteorder='big' ))
-    ################# send image ###########
-    conn.send(hexaImage)
-    
-    ################# receive AKC #############
-    message = conn.recv(7)
-    if message.decode('utf-8') == "ACK":
-        print('Image send...')
-        
-        # receive image 
-        ############### wait for SYN+ACK #################
+startTime  = time.time()
+sleepTime  = 1
+centersHex = 0
+for _ in range(10):
+    try:
+        ##### Creating a socket instance #####
+        conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        ############ Connect #################
+        conn.connect((ip_address, port))
+        conn.settimeout(2)
+        ############ reicive SYN #############
         message = conn.recv(7)
         if message.decode('utf-8') == "SYN":
+            ################# send SYN+AKC ###########
             conn.send(b"SYN+ACK")
-            print("Receiving data...")
-            dataHex = int.from_bytes(conn.recv(4), 'big')
-            data_receive = conn.recv(dataHex)
+            ################# send size ###########
+            conn.send(ySize.to_bytes( 4, byteorder='big' ))
+            conn.send(xSize.to_bytes( 4, byteorder='big' ))
+            ################# send image ###########
+            conn.send(hexaImage)
             
-            conn.send(b"ACK")
-            
-            centersHex  = int.from_bytes(conn.recv(4), 'big')
-            byteCenters = conn.recv(centersHex)
-            print("Done.")
-            ######################################################## 
-            centersInt = []
-            if centersHex>0:
+            ################# receive AKC #############
+            message = conn.recv(7)
+            if message.decode('utf-8') == "ACK":
+                print('Image send...')
                 
-                for q in range(int(centersHex/4)):
-                    centersInt.append(struct.unpack('<I', (byteCenters[q*4:(q*4)+4]))[0])
-        
-                centersArray = np.array(centersInt).reshape([int(centersHex/(4*3)),3])
+                # receive image 
+                ############### wait for SYN+ACK #################
+                message = conn.recv(7)
+                if message.decode('utf-8') == "SYN":
+                    conn.send(b"SYN+ACK")
+                    print("Receiving data...")
+                    dataHex = int.from_bytes(conn.recv(4), 'big')
+                    data_receive = conn.recv(dataHex)
+                    
+                    conn.send(b"ACK")
+                    
+                    centersHex  = int.from_bytes(conn.recv(4), 'big')
+                    byteCenters = conn.recv(centersHex)
+                
+                    if centersHex==len(byteCenters):
+                        print("Done.")
+                        break
+                    else:
+                        raise ConnectionResetError
+                        print("Corrupt data, restarting ...")
+    except ConnectionResetError:
+        print ('Connection Error: trying again')
+    except OSError:
+        conn.close()
+        time.sleep(sleepTime)
+        print ('Server busy: trying again')
+        sleepTime += 0.5
+######################################################################### 
+
+endTime = time.time()
+print("Processing time:", "%.3f s"%(endTime-startTime))
+              
+centersInt = []
+for q in range(int(centersHex/4)):
+    centersInt.append(struct.unpack('<I', (byteCenters[q*4:(q*4)+4]))[0])
+centersArray = np.array(centersInt).reshape([int(centersHex/(4*3)),3])   
     
-                plt.figure()
-                plt.imshow(image)
-                plt.plot(centersArray[:,0],centersArray[:,1],'ro',)
-                plt.show()
+plt.figure()
+plt.imshow(image)
+if centersInt != [0, 0, 0]:   
+    plt.plot(centersArray[:,0],centersArray[:,1],'ro',)
+plt.show()
             
             
   
