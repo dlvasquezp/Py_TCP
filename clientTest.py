@@ -6,8 +6,8 @@ import time
 import struct
 
 ############### Load image ###############
-im="temp/ImageFileName3.jpg"
-original = plt.imread(im) 
+im="temp/ImageFileName1.jpg"
+original = plt.imread(im)
 
 ySize,xSize=np.shape(original)
 image = original
@@ -20,8 +20,8 @@ plt.show()
 ############# Image in bytes ###################
 image     = image.astype(np.uint8)
 flatImage = image.flatten()
-hexaImage = ''.join([chr (q) for q in flatImage])
-dataLen   = len(hexaImage.encode(encoding='utf-8'))
+hexaImage = bytes(flatImage)
+dataLen   = len(hexaImage)
 dataHex   = dataLen.to_bytes( 4, byteorder='big' )
 ################################################
 
@@ -45,7 +45,7 @@ if message.decode('utf-8') == "SYN":
     conn.send(ySize.to_bytes( 4, byteorder='big' ))
     conn.send(xSize.to_bytes( 4, byteorder='big' ))
     ################# send image ###########
-    conn.send(hexaImage.encode(encoding='utf-8'))
+    conn.send(hexaImage)
     
     ################# receive AKC #############
     message = conn.recv(7)

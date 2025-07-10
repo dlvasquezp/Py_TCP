@@ -15,14 +15,14 @@ print('LOADING MODEL...')
 pathlib.PosixPath = pathlib.WindowsPath
 model = torch.hub.load( os.path.dirname(__file__)+"/yolov5", "custom", path= os.path.dirname(__file__)+"/trainedModels/best.pt", source="local",force_reload=True)
 
-def processImage(model,image2):
+def processImage(model,image2, cellsBorder=True):
     original = image2 
     results  = model(image2)
     results.show()
 
     masks_np = results.pandas().xyxy[0].sort_values("ymin")
 
-    confThrd = 0.4
+    confThrd = 0.51
     minArea  = 5000 #px2
     minBorDist = 40 #px
 
@@ -39,10 +39,17 @@ def processImage(model,image2):
         yMean = (row.ymax + row.ymin)/2
         area  = abs((row.xmax-row.xmin)*(row.ymax-row.ymin))
         areaList.append(area)
-        if xMean > minBorDist and yMean > minBorDist:
-            if xMean < (original.shape[1]-minBorDist):
-                if yMean < (original.shape[0]-minBorDist):
-                    if row.confidence > confThrd and area > minArea:
+        if row.confidence > confThrd and area > minArea:
+            if cellsBorder:
+                if xMean > minBorDist and yMean > minBorDist:
+                    if xMean < (original.shape[1]-minBorDist):
+                        if yMean < (original.shape[0]-minBorDist):
+                            centers.append([xMean,yMean,row.xmin])
+                            segment[np.where(((xv>row.xmin)*1 + (xv<row.xmax)*1 + (yv>row.ymin)*1 + (yv<row.ymax)*1)==4)]=(count%255)
+                            count += 1
+            else:
+                if row.xmax < (original.shape[1]-minBorDist/2) and row.xmin > minBorDist/2:
+                    if row.ymax < (original.shape[0]-minBorDist/2) and row.ymin > minBorDist/2:
                         centers.append([xMean,yMean,row.xmin])
                         segment[np.where(((xv>row.xmin)*1 + (xv<row.xmax)*1 + (yv>row.ymin)*1 + (yv<row.ymax)*1)==4)]=(count%255)
                         count += 1
@@ -112,10 +119,9 @@ while True:
             for char in data_receive[int(q*xSize):int((q+1)*xSize)]:
                 yColumn.append(char)
             image.append(yColumn)
-    
-        image2 = np.array(image,dtype=np.uint8)
         
-        ####################################################################################
+        image2 = np.array(image,dtype=np.uint8)     
+        
         try:
             segImage,maskCenters  = processImage(model,image2)
         except:
@@ -130,8 +136,8 @@ while True:
         ############### Send image #####################################
         segImage  = segImage.astype(np.uint8)
         flatImage = segImage.flatten()
-        hexaImage = ''.join([chr (q) for q in flatImage])
-        dataLen   = len(hexaImage.encode(encoding='utf-8'))
+        hexaImage = bytes(flatImage)
+        dataLen   = len(hexaImage)
         dataHex   = dataLen.to_bytes( 4, byteorder='big' )
         
         maskCenters = np.array(maskCenters).astype(np.uint32)
@@ -149,7 +155,7 @@ while True:
             if message.decode('utf-8') == "SYN+ACK":
                 print("Transmiting data...")
                 conn.send(dataHex)
-                conn.send(hexaImage.encode(encoding='utf-8'))
+                conn.send(hexaImage)
                 message = conn.recv(3)
                 if message.decode('utf-8') == "ACK":
                     conn.send(centersHex)
