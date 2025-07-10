@@ -18,7 +18,7 @@ model = torch.hub.load( os.path.dirname(__file__)+"/yolov5", "custom", path= os.
 def processImage(model,image2, cellsBorder=True):
     original = image2 
     results  = model(image2)
-    results.show()
+    #results.show()
 
     masks_np = results.pandas().xyxy[0].sort_values("ymin")
 
@@ -142,9 +142,10 @@ while True:
         
         maskCenters = np.array(maskCenters).astype(np.uint32)
         flatCenters = maskCenters.flatten()
-        byteCenters = flatCenters.tobytes()
+        byteCenters = bytes(flatCenters)
         centersLen  = len(byteCenters) 
         centersHex  = centersLen.to_bytes(4, byteorder='big')
+        print("# cells:", "%i"%(len(maskCenters)))
         
         signalState = 0
         while signalState==0:
