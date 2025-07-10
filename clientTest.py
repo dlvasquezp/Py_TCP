@@ -6,7 +6,7 @@ import time
 import struct
 
 ############### Load image ###############
-im="temp/ImageFileName2.jpg"
+im="temp/ImageFileName3.jpg"
 original = plt.imread(im) 
 
 ySize,xSize=np.shape(original)

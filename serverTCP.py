@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import select
 import time
-
+import os
 ###########################################################
 import torch
 import pathlib
@@ -13,11 +13,11 @@ from skimage import color
 from skimage import io
 print('LOADING MODEL...')
 pathlib.PosixPath = pathlib.WindowsPath
-model = torch.hub.load("C:/Users/vasquezpinzondavid/Documents/GitHub/PyLV_TCP_1.2/yolov5", "custom", path="C:/Users/vasquezpinzondavid/Documents/GitHub/PyLV_TCP_1.2/trainedModels/best.pt", source="local",force_reload=True)
+model = torch.hub.load( os.path.dirname(__file__)+"/yolov5", "custom", path= os.path.dirname(__file__)+"/trainedModels/best.pt", source="local",force_reload=True)
 
-def processImage(model,path):
-    original = io.imread(path)
-    results = model(path)
+def processImage(model,image2):
+    original = image2 
+    results  = model(image2)
     results.show()
 
     masks_np = results.pandas().xyxy[0].sort_values("ymin")
@@ -54,7 +54,6 @@ def processImage(model,path):
     
 
 ##########################################################
-
 def empty_socket(sock, limit=100):
     """remove the data present on the socket"""
     input = [sock]
@@ -77,7 +76,6 @@ server_object.bind((ip_address, port))
 server_object.listen()
 
 ############### IDLE #####################################
-
 while True:
     print('PYTHON SERVER READY')
     conn, clientAddress = server_object.accept() # connection,address
@@ -118,13 +116,11 @@ while True:
         image2 = np.array(image,dtype=np.uint8)
         
         ####################################################################################
-        path = 'temp/temp.tiff'
-        io.imsave(path, image2)
         try:
-            segImage,maskCenters  = processImage(model,path)
+            segImage,maskCenters  = processImage(model,image2)
         except:
             print('########## Model Error ################')
-            segImage,maskCenters  = processImage(model,path)
+            segImage,maskCenters  = processImage(model,image2)
         
         ####################################################################################
         
