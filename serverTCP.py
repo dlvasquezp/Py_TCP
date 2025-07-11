@@ -11,48 +11,50 @@ import matplotlib.image
 import cv2
 from skimage import color
 from skimage import io
+import json
 print('LOADING MODEL...')
 pathlib.PosixPath = pathlib.WindowsPath
 model = torch.hub.load( os.path.dirname(__file__)+"/yolov5", "custom", path= os.path.dirname(__file__)+"/trainedModels/best.pt", source="local",force_reload=True)
 
-def processImage(model,image2, cellsBorder=True):
+def processImage(model,image2, modelInfo):
     original = image2 
     results  = model(image2)
     #results.show()
 
     masks_np = results.pandas().xyxy[0].sort_values("ymin")
 
-    confThrd = 0.51
-    minArea  = 5000 #px2
-    minBorDist = 40 #px
-
     centers = []
-    areaList =[]
-    nx, ny = original.shape[:2]
-    x = np.linspace(0,ny-1,ny)
-    y = np.linspace(0,nx-1,nx)
+    ny, nx = original.shape
+    x = np.linspace(0,nx-1,nx)
+    y = np.linspace(0,ny-1,ny)
     xv, yv = np.meshgrid(x,y)
-    segment= np.zeros((nx,ny),dtype=np.uint8)
+    segment= np.zeros((ny,nx),dtype=np.uint8)
+    
+    masks_np['xMean'] = (masks_np.xmax + masks_np.xmin)/2
+    masks_np['yMean'] = (masks_np.ymax + masks_np.ymin)/2
+    masks_np['area']  = abs((masks_np.xmax-masks_np.xmin)*(masks_np.ymax-masks_np.ymin))
+    
+    ########### Confidence threshold ################
+    if "confThrd" in modelInfo:
+        masks_np = masks_np.drop(masks_np[masks_np.confidence<modelInfo["confThrd"]].index)
+    ########### Area threshold ######################
+    if "minArea" in modelInfo:
+        masks_np = masks_np.drop(masks_np[masks_np.area<modelInfo["minArea"]].index)
+    ########### Min border distance #################
+    if "minBorDist" in modelInfo:
+        masks_np = masks_np.drop(masks_np[masks_np.xMean<(modelInfo["minBorDist"])].index)
+        masks_np = masks_np.drop(masks_np[masks_np.yMean<(modelInfo["minBorDist"])].index)
+        masks_np = masks_np.drop(masks_np[masks_np.xMean>(nx-modelInfo["minBorDist"])].index)
+        masks_np = masks_np.drop(masks_np[masks_np.yMean>(ny-modelInfo["minBorDist"])].index)
+    ########### Min distance between cells ##########
+    
+    ########### Fill segmented image ################
     count  = 1
     for idx,row in masks_np.iterrows():
-        xMean = (row.xmax + row.xmin)/2
-        yMean = (row.ymax + row.ymin)/2
-        area  = abs((row.xmax-row.xmin)*(row.ymax-row.ymin))
-        areaList.append(area)
-        if row.confidence > confThrd and area > minArea:
-            if cellsBorder:
-                if xMean > minBorDist and yMean > minBorDist:
-                    if xMean < (original.shape[1]-minBorDist):
-                        if yMean < (original.shape[0]-minBorDist):
-                            centers.append([xMean,yMean,row.xmin])
-                            segment[np.where(((xv>row.xmin)*1 + (xv<row.xmax)*1 + (yv>row.ymin)*1 + (yv<row.ymax)*1)==4)]=(count%255)
-                            count += 1
-            else:
-                if row.xmax < (original.shape[1]-minBorDist/2) and row.xmin > minBorDist/2:
-                    if row.ymax < (original.shape[0]-minBorDist/2) and row.ymin > minBorDist/2:
-                        centers.append([xMean,yMean,row.xmin])
-                        segment[np.where(((xv>row.xmin)*1 + (xv<row.xmax)*1 + (yv>row.ymin)*1 + (yv<row.ymax)*1)==4)]=(count%255)
-                        count += 1
+        centers.append([row.xMean,row.yMean,row.area])
+        segment[np.where(((xv>row.xmin)*1 + (xv<row.xmax)*1 + (yv>row.ymin)*1 + (yv<row.ymax)*1)==4)]=(count%255)
+        count += 1
+    
                         
     if centers==[]:
         centers=[0,0,0]
@@ -105,8 +107,26 @@ while True:
             else:
                 print("Comunication error")
                 raise ConnectionResetError
+                
+        ############### Receive Model Information ########################
+        conn.send(b"SYN")
+        message = conn.recv(7)
+        if message.decode('utf-8') == "SYN+ACK":
+            print("Receiving data...")
+            infoLen   = int.from_bytes(conn.recv(4), 'big')
+            infoBytes = conn.recv(infoLen)
+            if len(infoBytes) == 0:
+                raise ConnectionResetError
+            if len(infoBytes)==(infoLen):
+                conn.send(b"ACK") 
+                print("Done, Information received")
+            else:
+                print("Comunication error")
+                raise ConnectionResetError
 
- 
+        modelInfo = json.loads(infoBytes)
+        print(modelInfo)
+        
         ############### Process image #####################################
         print("Processing...")
         startTime = time.time()
@@ -121,10 +141,10 @@ while True:
         image2 = np.array(image,dtype=np.uint8)     
         
         try:
-            segImage,maskCenters  = processImage(model,image2)
+            segImage,maskCenters  = processImage(model,image2,modelInfo)
         except:
             print('########## Model Error ################')
-            segImage,maskCenters  = processImage(model,image2)
+            segImage,maskCenters  = processImage(model,image2,modelInfo)
         
         ####################################################################################
         
@@ -145,7 +165,7 @@ while True:
         centersHex  = centersLen.to_bytes(4, byteorder='big')
         print("# cells:", "%i"%(len(maskCenters)))
         
-        signalState = 0
+        #signalState = 0
         empty_socket(conn)
         conn.send(b"SYN")
         message = conn.recv(7)
