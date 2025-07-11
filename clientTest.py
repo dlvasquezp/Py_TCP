@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import select
 import time
 import struct
+import json
 
 ############### Load image ###############
 im="temp/ImageFileName1.jpg"
@@ -25,6 +26,18 @@ dataLen   = len(hexaImage)
 dataHex   = dataLen.to_bytes( 4, byteorder='big' )
 ################################################
 
+########### Model information #################
+modelInfo = {
+    "model"     : "Yolo5_01",
+    "confThrd"  : 0.51      ,
+    "minArea"   : 5000      ,
+    "minBorDist": 40        ,
+    "resolution": 120
+}
+json_object = json.dumps(modelInfo, indent=4)
+infoBytes   = json_object.encode('ascii')
+infoLen     = len(infoBytes)
+###############################################
 
 # Connecting to the localhost
 ip_address = '127.0.0.1'
@@ -43,18 +56,32 @@ for _ in range(10):
         ############ reicive SYN #############
         message = conn.recv(7)
         if message.decode('utf-8') == "SYN":
-            ################# send SYN+AKC ###########
+            ############### send SYN+AKC ###########
             conn.send(b"SYN+ACK")
-            ################# send size ###########
+            ############### send size    ###########
             conn.send(ySize.to_bytes( 4, byteorder='big' ))
             conn.send(xSize.to_bytes( 4, byteorder='big' ))
             ################# send image ###########
             conn.send(hexaImage)
-            
             ################# receive AKC #############
             message = conn.recv(7)
             if message.decode('utf-8') == "ACK":
                 print('Image send...')
+                
+                ######### send Information ###########
+                ############ reicive SYN #############
+                message = conn.recv(7)
+                if message.decode('utf-8') == "SYN":
+                    ############### send SYN+AKC ###########
+                    conn.send(b"SYN+ACK")
+                    ############### send size    ###########
+                    conn.send(infoLen.to_bytes( 4, byteorder='big' ))
+                    ################# send image ###########
+                    conn.send(infoBytes)
+                    ################# receive AKC #############
+                    message = conn.recv(7)
+                    if message.decode('utf-8') == "ACK":
+                        print('Model Information send...')
                 
                 # receive image 
                 ############### wait for SYN+ACK #################
@@ -92,7 +119,8 @@ centersInt = []
 for q in range(int(centersHex/4)):
     centersInt.append(struct.unpack('<I', (byteCenters[q*4:(q*4)+4]))[0])
 centersArray = np.array(centersInt).reshape([int(centersHex/(4*3)),3])   
-    
+print(centersArray)  
+  
 plt.figure()
 plt.imshow(image)
 if centersInt != [0, 0, 0]:   
