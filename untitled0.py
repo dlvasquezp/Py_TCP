@@ -43,7 +43,6 @@ def processImage(model,image2, modelInfo, cellsBorder=True):
     x = np.linspace(0,nx-1,nx)
     y = np.linspace(0,ny-1,ny)
     xv, yv = np.meshgrid(x,y)
-    segment= np.zeros((ny,nx),dtype=np.uint8)
     
     masks_np['xMean'] = (masks_np.xmax + masks_np.xmin)/2
     masks_np['yMean'] = (masks_np.ymax + masks_np.ymin)/2
@@ -62,8 +61,40 @@ def processImage(model,image2, modelInfo, cellsBorder=True):
         masks_np = masks_np.drop(masks_np[masks_np.xMean>(nx-modelInfo["minBorDist"])].index)
         masks_np = masks_np.drop(masks_np[masks_np.yMean>(ny-modelInfo["minBorDist"])].index)
     ########### Min distance between cells ##########
+    segmentList = []
+    for idx,row in masks_np.iterrows():
+        segment= np.zeros((ny,nx),dtype=np.uint8)
+        segment[np.where(((xv>row.xmin)*1 + (xv<row.xmax)*1 + (yv>row.ymin)*1 + (yv<row.ymax)*1)==4)]= True
+        segmentList.append(segment)
     
+    checkList = []    
+    for i in range(len(segmentList)):
+        for j in range(i,len(segmentList)):
+            if i != j:
+                segA = segmentList[i]
+                segB = segmentList[j]
+                intersection =  np.sum(segA+segB==2)
+                
+                overlapA = intersection/np.sum(segA>0)
+                overlapB = intersection/np.sum(segB>0)
+                IoU = intersection/np.sum(segA + segB>0)
+                #print(i,j,IoU)
+                if IoU > 0.35 or overlapA>0.9 or overlapB>0.9:
+                    print(i,j,IoU)
+                    checkList.append([i,j])
+    
+    dropList=[]
+    for [i,j] in checkList:
+        confA = masks_np.confidence.iloc[i]
+        confB = masks_np.confidence.iloc[j]
+        if confA > confB:
+            dropList.append(masks_np.index[j])
+        else:
+            dropList.append(masks_np.index[i])
+    masks_np.drop(dropList,inplace=True)
+
     ########### Fill segmented image ################
+    segment= np.zeros((ny,nx),dtype=np.uint8)
     count  = 1
     for idx,row in masks_np.iterrows():
         centers.append([row.xMean,row.yMean,row.xmin])
@@ -80,18 +111,25 @@ def processImage(model,image2, modelInfo, cellsBorder=True):
 
 modelInfo = {
     "model"     : "Yolo5_01",
-    "confThrd"  : 0.51      ,
+    "confThrd"  : 0.21      ,
     "minArea"   : 5000      ,
     "minBorDist": 40        ,
+    
     "resolution": 120
 }
 
 im="temp/ImageFileName1.jpg"
 image2 = plt.imread(im)
 
+plt.figure()
+plt.imshow(image2)
+plt.show()
+
 segment, centers = processImage(model,image2, modelInfo, cellsBorder=True)
+
+
+%matplotlib inline
 
 plt.figure()
 plt.imshow(segment)
 plt.show()
-

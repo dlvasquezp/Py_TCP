@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import select
 import time
 import os
+import numbers
 ###########################################################
 import torch
 import pathlib
@@ -28,33 +29,64 @@ def processImage(model,image2, modelInfo):
     x = np.linspace(0,nx-1,nx)
     y = np.linspace(0,ny-1,ny)
     xv, yv = np.meshgrid(x,y)
-    segment= np.zeros((ny,nx),dtype=np.uint8)
     
     masks_np['xMean'] = (masks_np.xmax + masks_np.xmin)/2
     masks_np['yMean'] = (masks_np.ymax + masks_np.ymin)/2
     masks_np['area']  = abs((masks_np.xmax-masks_np.xmin)*(masks_np.ymax-masks_np.ymin))
     
     ########### Confidence threshold ################
-    if "confThrd" in modelInfo:
+    if "confThrd" in modelInfo and isinstance(modelInfo["confThrd"], numbers.Number):
         masks_np = masks_np.drop(masks_np[masks_np.confidence<modelInfo["confThrd"]].index)
     ########### Area threshold ######################
-    if "minArea" in modelInfo:
+    if "minArea" in modelInfo and isinstance(modelInfo["minArea"], numbers.Number):
         masks_np = masks_np.drop(masks_np[masks_np.area<modelInfo["minArea"]].index)
     ########### Min border distance #################
-    if "minBorDist" in modelInfo:
+    if "minBorDist" in modelInfo and isinstance(modelInfo["minBorDist"], numbers.Number):
         masks_np = masks_np.drop(masks_np[masks_np.xMean<(modelInfo["minBorDist"])].index)
         masks_np = masks_np.drop(masks_np[masks_np.yMean<(modelInfo["minBorDist"])].index)
         masks_np = masks_np.drop(masks_np[masks_np.xMean>(nx-modelInfo["minBorDist"])].index)
         masks_np = masks_np.drop(masks_np[masks_np.yMean>(ny-modelInfo["minBorDist"])].index)
-    ########### Min distance between cells ##########
+    ########### Max overlap between cells ##########
+    if ("maxOverlap" in modelInfo) and isinstance(modelInfo["maxOverlap"], numbers.Number) and ("maxIoU" in modelInfo) and isinstance(modelInfo["maxIoU"], numbers.Number):
+        segmentList = []
+        for idx,row in masks_np.iterrows():
+            segment= np.zeros((ny,nx),dtype=np.uint8)
+            segment[np.where(((xv>row.xmin)*1 + (xv<row.xmax)*1 + (yv>row.ymin)*1 + (yv<row.ymax)*1)==4)]= True
+            segmentList.append(segment)
+    
+        checkList = []    
+        for i in range(len(segmentList)):
+            for j in range(i,len(segmentList)):
+                if i != j:
+                    segA = segmentList[i]
+                    segB = segmentList[j]
+                    intersection =  np.sum(segA+segB==2)
+                    
+                    if intersection > 0:
+                        overlapA = intersection/np.sum(segA>0)
+                        overlapB = intersection/np.sum(segB>0)
+                        IoU = intersection/np.sum(segA + segB>0)
+                        if IoU > modelInfo["maxIoU"] or overlapA>modelInfo["maxOverlap"] or overlapB>modelInfo["maxOverlap"]:
+                            print(i,j,IoU)
+                            checkList.append([i,j])
+    
+        dropList=[]
+        for [i,j] in checkList:
+            confA = masks_np.confidence.iloc[i]
+            confB = masks_np.confidence.iloc[j]
+            if confA > confB:
+                dropList.append(masks_np.index[j])
+            else:
+                dropList.append(masks_np.index[i])
+        masks_np.drop(dropList,inplace=True)
     
     ########### Fill segmented image ################
+    segment= np.zeros((ny,nx),dtype=np.uint8)
     count  = 1
     for idx,row in masks_np.iterrows():
         centers.append([row.xMean,row.yMean,row.area])
         segment[np.where(((xv>row.xmin)*1 + (xv<row.xmax)*1 + (yv>row.ymin)*1 + (yv<row.ymax)*1)==4)]=(count%255)
         count += 1
-    
                         
     if centers==[]:
         centers=[0,0,0]
@@ -88,7 +120,7 @@ while True:
     print('PYTHON SERVER READY')
     conn, clientAddress = server_object.accept() # connection,address
     print(clientAddress)
-    conn.settimeout(5)
+    conn.settimeout(10)
     try:
         ############### Receive Image #####################################
         print("SERVER CONNECTED TO CLIENT")

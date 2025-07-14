@@ -31,7 +31,9 @@ modelInfo = {
     "model"     : "Yolo5_01",
     "confThrd"  : 0.51      ,
     "minArea"   : 5000      ,
-    "minBorDist": 40        ,
+    "minBorDist": 50        ,
+    "maxOverlap": 0.9       ,
+    "maxIoU"    : 0.35      ,
     "resolution": 120
 }
 json_object = json.dumps(modelInfo, indent=4)
@@ -52,7 +54,7 @@ for _ in range(10):
         conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         ############ Connect #################
         conn.connect((ip_address, port))
-        conn.settimeout(2)
+        conn.settimeout(10)
         ############ reicive SYN #############
         message = conn.recv(7)
         if message.decode('utf-8') == "SYN":
@@ -97,7 +99,7 @@ for _ in range(10):
                     centersHex  = int.from_bytes(conn.recv(4), 'big')
                     byteCenters = conn.recv(centersHex)
                 
-                    if centersHex==len(byteCenters):
+                    if centersHex==len(byteCenters) and centersHex!=0:
                         print("Done.")
                         break
                     else:
