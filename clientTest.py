@@ -6,8 +6,17 @@ import time
 import struct
 import json
 
+def recv_all(sock, length):
+    data = b''
+    while len(data) < length:
+        more = sock.recv(length - len(data))
+        if not more:
+            raise ConnectionResetError("Socket closed before receiving full data")
+        data += more
+    return data
+
 ############### Load image ###############
-im="temp/ImageFileName1.jpg"
+im="temp/ImageFileName5.jpg"
 original = plt.imread(im)
 
 ySize,xSize=np.shape(original)
@@ -42,8 +51,12 @@ infoLen     = len(infoBytes)
 ###############################################
 
 # Connecting to the localhost
-ip_address = '127.0.0.1'
+ip_address = '10.3.20.25'
+#ip_address = '10.2.9.28'
+#ip_address = 'isrvlusersrv01'
 port = 5555
+
+print(socket.getaddrinfo(ip_address, port))
 
 startTime  = time.time()
 sleepTime  = 1
@@ -92,12 +105,15 @@ for _ in range(10):
                     conn.send(b"SYN+ACK")
                     print("Receiving data...")
                     dataHex = int.from_bytes(conn.recv(4), 'big')
-                    data_receive = conn.recv(dataHex)
+                    #data_receive = conn.recv(dataHex)
+                    data_receive = recv_all(conn, dataHex)
+                    #print(len(data_receive))
                     
                     conn.send(b"ACK")
                     
                     centersHex  = int.from_bytes(conn.recv(4), 'big')
-                    byteCenters = conn.recv(centersHex)
+                    #byteCenters = conn.recv(centersHex)
+                    byteCenters = recv_all(conn, centersHex)
                 
                     if centersHex==len(byteCenters) and centersHex!=0:
                         print("Done.")
@@ -129,5 +145,7 @@ if centersInt != [0, 0, 0]:
     plt.plot(centersArray[:,0],centersArray[:,1],'ro',)
 plt.show()
             
+
+data_receive 
             
   
